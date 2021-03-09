@@ -1,0 +1,15 @@
+FIll out this document with the intended design. This design is not final, and can
+be updated if you run into problems completing the project
+
+How will the heap be structured?
+
+How will umalloc be implemented?
+
+How will ufree be implemented?
+
+What checks are putting into check_heap?
+
+Are you making any changes to the memory_block_t struct?
+
+Once this project is finsihed, these answers will finalized in the write up.
+

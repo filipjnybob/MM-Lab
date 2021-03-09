@@ -4,7 +4,9 @@
 #include <stdio.h>
 #include <assert.h>
 
-const char author[] = ANSI_BOLD ANSI_COLOR_RED "REPLACE THIS WITH YOUR NAME AND UT EID" ANSI_RESET;
+const char author[] = ANSI_BOLD ANSI_COLOR_RED "Isaac Adams EID: iga263" ANSI_RESET;
+
+const int MAGIC_NUMBER = 0x12345678;
 
 /*
  * The following helpers can be used to interact with the memory_block_t
@@ -18,6 +20,15 @@ memory_block_t *free_head;
  * is_allocated - returns true if a block is marked as allocated.
  */
 bool is_allocated(memory_block_t *block) {
+    assert(block != NULL);
+    return block->block_size_alloc & 0x1;
+}
+
+/*
+ * is_allocated - returns true if a block is marked as allocated.
+ */
+// TODO: fix commenting
+bool is_allocated_footer(footer_t *block) {
     assert(block != NULL);
     return block->block_size_alloc & 0x1;
 }
@@ -83,6 +94,15 @@ memory_block_t *get_block(void *payload) {
     assert(payload != NULL);
     return ((memory_block_t *)payload) - 1;
 }
+
+/*
+ * get_footer - gets the footer of the block.
+ */
+footer_t *get_footer(memory_block_t *block) {
+    assert(block != NULL);
+    return ((void*)(block + 1)) + get_size(block);
+}
+
 
 /*
  * The following are helper functions that can be implemented to assist in your
