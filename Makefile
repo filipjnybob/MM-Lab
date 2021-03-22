@@ -1,6 +1,6 @@
 # Makefile
 CC = gcc
-CFLAGS = -Wall -O0 -Werror -ggdb
+CFLAGS = -Wall -O2 -Werror -ggdb
 
 all: runner performance gprof_performance
 support.o: support.c support.h

@@ -21,6 +21,9 @@ const int LIST_ORDER = 6;
 int check_heap() {
     memory_block_t* free_block = free_head;
 
+    if(free_block == NULL) {
+        return 0;
+    }
     // Check each free block in the free list
     do {
         
@@ -52,11 +55,10 @@ int check_heap() {
             return FOOTER_MISMATCH;
         }
         
-        /*
         // Check 5 - Are there any free blocks adjacent to this one?
         // Check below
         footer = ((footer_t*) free_block) - 1;
-        if(footer->magic_number == MAGIC_NUMBER) {
+        if(contained_in_block((void*)footer) && footer->magic_number == MAGIC_NUMBER) {
             // Valid footer
             if(!is_allocated_footer(footer)) {
                 // Found contiguous free block, not coalesced
@@ -66,14 +68,14 @@ int check_heap() {
 
         // Check above
         memory_block_t* header = get_above_header(free_block);
-        if(header->magic_number == MAGIC_NUMBER) {
+        if(contained_in_block((void*)header) && header->magic_number == MAGIC_NUMBER) {
             // Valid header
             if(!is_allocated(header)) {
                 // Found contiguous free block, not coalesced
                 return CONTIGUOUS;
             }
         }
-        */
+        
 
         free_block = free_block->next;
     } while(free_block != free_head);

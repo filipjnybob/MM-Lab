@@ -12,6 +12,16 @@ const int HEADER_SIZE = sizeof(memory_block_t) + sizeof(footer_t);
 
 extern int check_heap();
 
+int sbrk_block_size;
+
+sbrk_block *block_head;
+
+int heap_size = 0;
+
+int extend_count = 0;
+
+int list_size = 0;
+
 /*
  * The following helpers can be used to interact with the memory_block_t
  * struct, they can be adjusted as necessary.
@@ -145,6 +155,7 @@ memory_block_t *get_header(footer_t* footer) {
  */
 void insert(memory_block_t* block) {
     // Check if list is empty
+    list_size++;
     if(free_head == NULL) {
         free_head = block;
         free_head->next = free_head;
@@ -175,6 +186,7 @@ void insert(memory_block_t* block) {
  * insert_at_end - inserts given free block at the end of the free list
  */
 void insert_at_end(memory_block_t* block) {
+    list_size++;
     if(free_head == NULL) {
         block->next = block;
         block->prev = block;
@@ -187,11 +199,21 @@ void insert_at_end(memory_block_t* block) {
     }
 }
 
+void print_list() {
+    memory_block_t* temp = free_head;
+    do {
+        printf("Address: %p, ", temp);
+        temp = temp->next;
+    } while(temp != free_head);
+    printf("\n");
+}
+
 /*
  * remove_from_list - removes the given block from the free list if it is present
  */
 void remove_from_list(memory_block_t* block) {
     if(block->next != NULL && block->prev != NULL) {
+        list_size--;
         if(block->next == block) {
             // block is the only element in the free list
             free_head = NULL;
@@ -200,16 +222,20 @@ void remove_from_list(memory_block_t* block) {
         } else {
             block->prev->next = block->next;
             block->next->prev = block->prev;
+
             if(free_head == block) {
                 // Update free_head
                 free_head = block->next;
             }
+            assert(block->prev->next != block && block->next->prev != block);
             block->prev = NULL;
             block->next = NULL;
         }
         
     }
 }
+
+
 
 /*
  * get_above_header - returns a pointer to the header of the block above the given block
@@ -231,6 +257,10 @@ footer_t *get_below_footer(memory_block_t* block) {
  */
 memory_block_t *find(size_t size) {
 
+    if(free_head == NULL) {
+        return extend(size);
+    }
+
     if(get_size(free_head) >= size) {
         return free_head;
     }
@@ -246,18 +276,37 @@ memory_block_t *find(size_t size) {
 }
 
 /*
+ * put_sbrk_block - Initializes a sbrk_block at the given address with the given size
+ */
+void put_sbrk_block(sbrk_block* block, size_t size) {
+    block->sbrk_start = (uint64_t) (((void*)block) + get_padded_size(sizeof(sbrk_block)));
+    block->sbrk_end = (uint64_t) ((void*)block->sbrk_start) + size;
+    block->next = block_head;
+    block_head = block;
+}
+
+/*
  * extend - extends the heap if more memory is required. Returns NULL if an error occurred.
  */
 memory_block_t *extend(size_t size) {
-    size_t extend_size = size * 2;
-    void *result = csbrk(get_block_size(extend_size));
+    size_t extend_size = get_padded_size(heap_size * 1.5 + size);
+    // Ensure extension is not too large
+    if(extend_size > ALIGNMENT * PAGESIZE - HEADER_SIZE - sbrk_block_size) {
+        extend_size = ALIGNMENT * PAGESIZE - HEADER_SIZE - sbrk_block_size;
+    }
+    heap_size += extend_size;
+    void *result = csbrk(get_block_size(extend_size) + sbrk_block_size);
     if(result == NULL) {
         return NULL;
     }
-    put_block(result, get_padded_size(size * 2), false);
+    
+    put_sbrk_block(result, get_block_size(extend_size));
+    result = (void*)block_head->sbrk_start;
+    put_block(result, extend_size, false);
     // This method should only be called if there isn't a free block big enough for the request
     // As such, the newly allocated block should be the biggest.
     insert_at_end(result);
+    extend_count++;
     return result;
 }
 
@@ -267,60 +316,92 @@ memory_block_t *extend(size_t size) {
  * Returns the allocated block.
  */
 memory_block_t *split(memory_block_t *block, size_t size) {
+    remove_from_list(block);
+    assert(get_size(block) % 16 == 0);
+    assert(get_block_size(get_size(block)) == get_size(block) + HEADER_SIZE);
+       int initial = get_block_size(get_size(block));
     size_t remaining_size = get_size(block) - get_padded_size(size);
     // Check that there's enough remaining size to split the block
     if(remaining_size < (HEADER_SIZE + ALIGNMENT)) {
         // Not enough remaining space, don't split
         allocate(block);
-        remove_from_list(block);
         return block;
     }
     // Create the allocated block
-    remove_from_list(block);
     put_block(block, get_padded_size(size), true);
     // Create the free block
     memory_block_t* free = get_above_header(block);
     put_block(free, remaining_size - HEADER_SIZE, false);
+    assert(get_size(block) + get_size(free) + (HEADER_SIZE * 2) == initial);
     insert(free);
 
     return block;
 }
 
 /*
+ * contained_in_block - Returns true if the given pointer lies in one of
+ * the allocated blocks given by csbrk.
+ */
+bool contained_in_block(void* ptr) {
+    sbrk_block* temp = block_head;
+    uint64_t address = (uint64_t) ptr;
+    while(temp != NULL) {
+        if(address >= temp->sbrk_start && address < temp->sbrk_end) {
+            return true;
+        }
+        temp = temp->next;
+        //printf("%p\n", temp);
+    }
+
+    return false;
+}
+
+/*
  * coalesce - coalesces a free memory block with neighbors.
  */
 memory_block_t *coalesce(memory_block_t *block) {
-    
+    printf("list_size = %d\n", list_size);
+    if(!contained_in_block((void*)block) || !(block->magic_number == MAGIC_NUMBER) 
+        || is_allocated(block)) {
+            return block;
+        }
+
     // Check above
     memory_block_t* above = get_above_header(block);
     // Check magic number
-    if(above != NULL && above->magic_number == MAGIC_NUMBER) {
+    if(contained_in_block((void*)above) && above->magic_number == MAGIC_NUMBER) {
         if(!is_allocated(above)) {
             remove_from_list(block);
             remove_from_list(above);
             size_t combined_size = get_size(block) + get_size(above) + HEADER_SIZE;
             put_block(block, combined_size, false);
+            printf("Coalesced1\n");
         }
     }
+
+    footer_t* below = get_below_footer(block);
+    if(contained_in_block((void*)below) && below->magic_number == MAGIC_NUMBER) {
+        return coalesce(get_header(below));
+    }
     
+    /*
     // Check below
     footer_t* below = get_below_footer(block);
-    assert(below == get_footer(get_header(below)));
-    assert(get_above_header(get_header(below)) == block);
+    //assert(below == get_footer(get_header(below)));
+    //assert(get_above_header(get_header(below)) == block);
     // Check magic number
-    if(below != NULL && below->magic_number == MAGIC_NUMBER) {
+    if(contained_in_block((void*)below) && below->magic_number == MAGIC_NUMBER) {
         if(!is_allocated_footer(below)) {
             memory_block_t* below_head = get_header(below);
-            assert(below_head->block_size_alloc == below->block_size_alloc);
-            assert(below_head->magic_number == MAGIC_NUMBER);
             remove_from_list(block);
             remove_from_list(below_head);
             size_t combined_size = get_size(block) + get_size(below_head) + HEADER_SIZE;
             put_block(below_head, combined_size, false);
-            block = below_head;
-            assert(below_head->block_size_alloc == get_footer(below_head)->block_size_alloc);
+            printf("Coalesced2\n");
+            return below_head;
         }
     }
+    */
 
     return block;
 }
@@ -330,7 +411,12 @@ memory_block_t *coalesce(memory_block_t *block) {
  */
 
 size_t get_padded_size(size_t size) {
-    return size + (ALIGNMENT - (size % ALIGNMENT));
+    int remainder = size % ALIGNMENT;
+    if(remainder == 0) {
+        return size;
+    } else {
+        return size + (ALIGNMENT - (size % ALIGNMENT));
+    }
 }
 
 /*
@@ -345,6 +431,8 @@ size_t get_block_size(size_t size) {
  * along with allocating initial memory.
  */
 int uinit() {
+    sbrk_block_size = get_padded_size(sizeof(sbrk_block));
+    block_head = NULL;
     size_t initial_size = (ALIGNMENT * 5);
     memory_block_t* result = extend(initial_size);
     if(result == NULL) {
@@ -376,9 +464,10 @@ void ufree(void *ptr) {
         // Check magic number
         if(block->magic_number == MAGIC_NUMBER) {
             deallocate(block);
-            //coalesce(block);
+            block = coalesce(block);
             insert(block);
-            //printf("Check heap Return: %d\n", check_heap());
+            printf("list_size = %d\n", list_size);
+            printf("Check_heap: %d", check_heap());
         }
     }
 }
