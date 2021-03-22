@@ -10,6 +10,9 @@
  * In the current design bit0 is the allocated bit
  * bits 1-3 are unused.
  * and the remaining 60 bit represent the size.
+ * The struct has been modified adding the magic_number and prev fields.
+ * magic_number stores a unique number used to validate the block.
+ * prev stores a pointer to the previous block in the free list.
  */
 typedef struct memory_block_struct {
     size_t block_size_alloc;

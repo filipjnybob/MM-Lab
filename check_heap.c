@@ -21,14 +21,15 @@ const int LIST_ORDER = 6;
 int check_heap() {
     memory_block_t* free_block = free_head;
 
+    // Check if free list is empty
     if(free_block == NULL) {
         return 0;
     }
     // Check each free block in the free list
     do {
         
-        // Check 1 - Is the pointer pointing to a valid block? Check the MAGIC_NUMBER
-        if(free_block->magic_number != MAGIC_NUMBER) {
+        // Check 1 - Is the pointer pointing to a valid block?
+        if(!contained_in_block(free_block) || free_block->magic_number != MAGIC_NUMBER) {
             return INVALID_BLOCK;
         }
         
