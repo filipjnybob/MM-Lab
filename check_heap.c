@@ -10,6 +10,7 @@ const int ALLOCATED = 2;
 const int INVALID_FOOTER = 3;
 const int FOOTER_MISMATCH = 4;
 const int CONTIGUOUS = 5;
+const int LIST_ORDER = 6;
 
 /*
  * check_heap -  used to check that the heap is still in a consistent state.
@@ -21,7 +22,7 @@ int check_heap() {
     memory_block_t* free_block = free_head;
 
     // Check each free block in the free list
-    while(free_block != NULL) {
+    do {
         
         // Check 1 - Is the pointer pointing to a valid block? Check the MAGIC_NUMBER
         if(free_block->magic_number != MAGIC_NUMBER) {
@@ -33,7 +34,12 @@ int check_heap() {
             return ALLOCATED;
         }
 
-        // Check 3 - Does the information in the header and footer match?
+        // Check 3 - Is the block larger than the previous?
+        if(free_block != free_head && get_size(free_block) < get_size(free_block->prev)) {
+            return LIST_ORDER;
+        }
+
+        // Check 4 - Does the information in the header and footer match?
         footer_t* footer = get_footer(free_block);
 
         // Check that footer is a valid footer
@@ -45,8 +51,9 @@ int check_heap() {
         if(free_block->block_size_alloc != footer->block_size_alloc) {
             return FOOTER_MISMATCH;
         }
-
-        // Check 4 - Are there any free blocks adjacent to this one?
+        
+        /*
+        // Check 5 - Are there any free blocks adjacent to this one?
         // Check below
         footer = ((footer_t*) free_block) - 1;
         if(footer->magic_number == MAGIC_NUMBER) {
@@ -58,7 +65,7 @@ int check_heap() {
         }
 
         // Check above
-        memory_block_t* header = (memory_block_t*)(get_footer(free_block) + 1);
+        memory_block_t* header = get_above_header(free_block);
         if(header->magic_number == MAGIC_NUMBER) {
             // Valid header
             if(!is_allocated(header)) {
@@ -66,9 +73,10 @@ int check_heap() {
                 return CONTIGUOUS;
             }
         }
+        */
 
         free_block = free_block->next;
-    }
+    } while(free_block != free_head);
 
     // Consistent Heap
     return 0;

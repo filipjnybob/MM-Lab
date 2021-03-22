@@ -14,6 +14,7 @@
 typedef struct memory_block_struct {
     size_t block_size_alloc;
     int magic_number;
+    struct memory_block_struct *prev;
     struct memory_block_struct *next;
 } memory_block_t;
 
@@ -28,16 +29,28 @@ bool is_allocated_footer(footer_t *block);
 void allocate(memory_block_t *block);
 void deallocate(memory_block_t *block);
 size_t get_size(memory_block_t *block);
+size_t get_size_footer(footer_t *footer);
 memory_block_t *get_next(memory_block_t *block);
 void put_block(memory_block_t *block, size_t size, bool alloc);
 void *get_payload(memory_block_t *block);
 memory_block_t *get_block(void *payload);
 footer_t *get_footer(memory_block_t *block);
+memory_block_t *get_header(footer_t* footer);
+
+void insert(memory_block_t* block);
+void insert_at_end(memory_block_t* block);
+void remove_from_list(memory_block_t* block);
+memory_block_t *get_above_header(memory_block_t* block);
+footer_t *get_below_footer(memory_block_t* block);
+
 
 memory_block_t *find(size_t size);
 memory_block_t *extend(size_t size);
 memory_block_t *split(memory_block_t *block, size_t size);
 memory_block_t *coalesce(memory_block_t *block);
+
+size_t get_padded_size(size_t size);
+size_t get_block_size(size_t size);
 
 
 // Portion that may not be edited
